@@ -117,7 +117,52 @@ bool ImageData::IsMpo(const jpeg_decompress_struct &cinfo) {
     return false;
 }
 
-bool ImageData::ParseOneImage(jpeg_decompress_struct &cinfo) {
+
+ScanLineCollector::~ScanLineCollector() {
+    if (bitmapData != NULL) {
+        delete bitmapData;
+    }
+}
+
+// Store the current image.
+void ScanLineCollector::Consume(jpeg_decompress_struct &cinfo) {
+    jpeg_start_decompress(&cinfo);
+
+    output_components = cinfo.output_components;
+    width = cinfo.output_width;
+    height = cinfo.output_height;
+
+    rowBytes = width * output_components;
+    //format_ = format;
+
+    bitmapData = new uint8_t[rowBytes * height];
+
+    while (cinfo.output_scanline < cinfo.output_height) {
+        uint8_t *lineBuffer = bitmapData + cinfo.output_scanline * rowBytes;
+        jpeg_read_scanlines(&cinfo, &lineBuffer, 1);
+    }
+
+    jpeg_finish_decompress(&cinfo);
+}
+
+
+// Fast-forward past the current image.
+void ImageData::DrainImage(jpeg_decompress_struct &cinfo) {
+    jpeg_start_decompress(&cinfo);
+
+    uint32_t rowBytes = cinfo.output_width * cinfo.output_components;
+    uint8_t *lineBuffer = new uint8_t[rowBytes];
+
+    while (cinfo.output_scanline < cinfo.output_height) {
+        jpeg_read_scanlines(&cinfo, &lineBuffer, 1);
+    }
+
+    delete lineBuffer;
+
+    jpeg_finish_decompress(&cinfo);
+}
+
+ScanLineCollector *ImageData::ParseOneImage(jpeg_decompress_struct &cinfo) {
 
     // Parse header of next image in stream.
 
@@ -131,36 +176,15 @@ bool ImageData::ParseOneImage(jpeg_decompress_struct &cinfo) {
 
     bool isMpo = IsMpo(cinfo);
 
-    jpeg_start_decompress(&cinfo);
-
-
-// NOTE(dustin): The library requires you to read the scanlines.
-    uint32_t rowBytes = cinfo.output_width * cinfo.output_components;
-    //format_ = format;
-    // uint32_t width_ = cinfo.output_width;
-    // uint32_t height_ = cinfo.output_height;
-
-    uint8_t *bitmapData = new uint8_t[rowBytes * cinfo.output_height];
-
-    while (cinfo.output_scanline < cinfo.output_height) {
-        uint8_t *lineBuffer = bitmapData + cinfo.output_scanline * rowBytes;
-        jpeg_read_scanlines(&cinfo, &lineBuffer, 1);
-    }
-
-// NOTE(dustin): We don't actually care about the bitmap just yet for what we're doing.
-    delete bitmapData;
-
-
-    jpeg_finish_decompress(&cinfo);
-
     if (isMpo == false) {
-        std::cout << "Skipping non-MPO image." << std::endl;
-        return false;
+        DrainImage(cinfo);
+        return NULL;
     }
 
-// TODO(dustin): !! Finish.
+    ScanLineCollector *slc = new ScanLineCollector();
+    slc->Consume(cinfo);
 
-    return true;
+    return slc;
 }
 
 void ImageData::ParseAll() {
@@ -181,7 +205,6 @@ void ImageData::ParseAll() {
         /* If we get here, the JPEG code has signaled an error.
          * We need to clean up the JPEG object, close the input file, and return.
          */
-        jpeg_destroy_decompress(&cinfo);
 
         throw new JpegLoadError("Could not set error handler.");
     }
@@ -195,19 +218,33 @@ void ImageData::ParseAll() {
     jpeg_save_markers(&cinfo, JPEG_APP0 + 1, 0xffff);
     jpeg_save_markers(&cinfo, JPEG_APP0 + 2, 0xffff);
 
-    bool isMpo;
 
     // Read two inline images.
 
-    isMpo = ParseOneImage(cinfo);
-    if (isMpo == false) {
+    ScanLineCollector *slc1;
+    ScanLineCollector *slc2;
+
+    slc1 = ParseOneImage(cinfo);
+    if (slc1 == NULL) {
+        jpeg_destroy_decompress(&cinfo);
+
         std::cout << "First image is not an MPO." << std::endl;
+        return;
     }
 
-    isMpo = ParseOneImage(cinfo);
-    if (isMpo == false) {
+    slc2 = ParseOneImage(cinfo);
+    if (slc2 == NULL) {
+        delete slc1;
+        jpeg_destroy_decompress(&cinfo);
+
         std::cout << "Second image is not an MPO." << std::endl;
+        return;
     }
+
+// TODO(dustin): !! We need to be able to detect whether there are more images to read from the stream or not, and then we can refactor this into a loop.
+
+    delete slc1;
+    delete slc2;
 
     jpeg_destroy_decompress(&cinfo);
 }
