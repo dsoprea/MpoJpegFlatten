@@ -106,8 +106,8 @@ bool ImageData::IsMpo(const jpeg_decompress_struct &cinfo) {
 void ImageData::SkipImageData(jpeg_decompress_struct &cinfo) {
     jpeg_start_decompress(&cinfo);
 
-    uint32_t row_bytes = cinfo.output_width * cinfo.output_components;
-    uint8_t *line_buffer = new uint8_t[row_bytes];
+    uint32_t stride = cinfo.output_width * cinfo.output_components;
+    uint8_t *line_buffer = new uint8_t[stride];
 
     while (cinfo.output_scanline < cinfo.output_height) {
         jpeg_read_scanlines(&cinfo, &line_buffer, 1);
@@ -136,6 +136,7 @@ bool ImageData::HasImage(jpeg_decompress_struct &cinfo) {
     int byte1 = GETJOCTET(*(cinfo.src->next_input_byte + 0));
     int byte2 = GETJOCTET(*(cinfo.src->next_input_byte + 1));
 
+    // Check if an SOI marker is at the front of the stream.
     if (byte1 != 0xff || byte2 != 0xd8) {
         return false;
     }
@@ -175,6 +176,11 @@ bool ImageData::BuildLrImage(const ScanlineCollector *slc_left, const ScanlineCo
     } else if (slc_left->Width() != slc_right->Width()) {
         return false;
     } else if (slc_left->Height() != slc_right->Height()) {
+        return false;
+    }
+
+// TODO(dustin): !! Do we want to support any other colorspaces?
+    if (slc_left->Colorspace() != JCS_RGB || slc_right->Colorspace() != JCS_RGB) {
         return false;
     }
 
