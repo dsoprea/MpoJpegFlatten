@@ -3,12 +3,14 @@
 #include <string>
 #include <cstdint>
 #include <sstream>
+#include <vector>
 
 #include <stdio.h>
 #include <string.h>
 #include <setjmp.h>
 
 #include <jpeglib.h>
+#include <jerror.h>
 
 #include "image_data.h"
 #include "exceptions.h"
@@ -49,12 +51,19 @@ void ImageData::Open() {
 
 METHODDEF(void) jpegErrorHandler(j_common_ptr cinfo)
 {
+    std::cout << "Error!" << std::endl;
+
     /* cinfo->err really points to a jpegErrorManager struct, so coerce pointer */
     jpegErrorPtr jse = (jpegErrorPtr)cinfo->err;
 
     /* Always display the message. */
     /* We could postpone this until after returning, if we chose. */
     (*cinfo->err->output_message) (cinfo);
+
+    // char error_message[JMSG_LENGTH_MAX];
+    // cinfo->err->format_message(cinfo, error_message);
+
+    // std::cout << "Message: [" << error_message << "]" << std::endl;
 
     /* Return control to the setjmp point */
     longjmp(jse->setjmp_buffer, 1);
@@ -162,10 +171,35 @@ void ImageData::DrainImage(jpeg_decompress_struct &cinfo) {
     jpeg_finish_decompress(&cinfo);
 }
 
-ScanLineCollector *ImageData::ParseOneImage(jpeg_decompress_struct &cinfo) {
+// Check for another image in the stream.
+//
+// We'll using a derivation of what the internal logic does in order to check
+// for the beginning of another JPEG image but without consuming bytes from it.
+bool ImageData::HasImage(jpeg_decompress_struct &cinfo) {
 
-    // Parse header of next image in stream.
+    // Make sure we have at least two bytes in the buffer. Since we used
+    // jpeg_mem_src() with an existing buffer, we have an guarantee from the
+    // libjpeg internals that we already had all data, upfront, and, when we
+    // don't have enough data, there's truly no more data available. See
+    // fill_mem_input_buffer() for more information.
+    if (cinfo.src->bytes_in_buffer < 2) {
+        return false;
+    }
 
+    int byte1 = GETJOCTET(*(cinfo.src->next_input_byte + 0));
+    int byte2 = GETJOCTET(*(cinfo.src->next_input_byte + 1));
+
+    if (byte1 != 0xff || byte2 != 0xd8) {
+        return false;
+    }
+
+    return true;
+}
+
+// Parse the next JPEG image in the current stream. Return NULL if there's an
+// image but not an MPO (should never happen; in this case, consume but ignore
+// the data).
+ScanLineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cinfo) {
     int headerStatus = jpeg_read_header(&cinfo, TRUE);
     if (headerStatus != JPEG_HEADER_OK) {
         std::stringstream ss;
@@ -219,32 +253,26 @@ void ImageData::ParseAll() {
     jpeg_save_markers(&cinfo, JPEG_APP0 + 2, 0xffff);
 
 
-    // Read two inline images.
+    // Read all images from a single stream. Normal JPEGs will have one. The
+    // MPOs we're interested in will have more than one.
+    std::vector<ScanLineCollector *> images;
+    while(true) {
+        if (HasImage(cinfo) == false) {
+            break;
+        }
 
-    ScanLineCollector *slc1;
-    ScanLineCollector *slc2;
+        ScanLineCollector *slc = ParseNextMpoChildImage(cinfo);
+        if (slc == NULL) {
+            break;
+        }
 
-    slc1 = ParseOneImage(cinfo);
-    if (slc1 == NULL) {
-        jpeg_destroy_decompress(&cinfo);
-
-        std::cout << "First image is not an MPO." << std::endl;
-        return;
+        images.push_back(slc);
     }
 
-    slc2 = ParseOneImage(cinfo);
-    if (slc2 == NULL) {
-        delete slc1;
-        jpeg_destroy_decompress(&cinfo);
-
-        std::cout << "Second image is not an MPO." << std::endl;
-        return;
+    for (std::vector<ScanLineCollector *>::iterator it = images.begin() ; it != images.end(); ++it) {
+        // std::cout << ' ' << (*it)->Rows() << std::endl;
+        delete *it;
     }
-
-// TODO(dustin): !! We need to be able to detect whether there are more images to read from the stream or not, and then we can refactor this into a loop.
-
-    delete slc1;
-    delete slc2;
 
     jpeg_destroy_decompress(&cinfo);
 }

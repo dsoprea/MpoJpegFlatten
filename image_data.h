@@ -53,9 +53,10 @@ public:
     void ParseAll();
 
 private:
-    ScanLineCollector *ParseOneImage(jpeg_decompress_struct &cinfo);
+    ScanLineCollector *ParseNextMpoChildImage(jpeg_decompress_struct &cinfo);
     bool IsMpo(const jpeg_decompress_struct &cinfo);
     void DrainImage(jpeg_decompress_struct &cinfo);
+    bool HasImage(jpeg_decompress_struct &cinfo);
 
     std::string filepath;
     unsigned char *imageData = NULL;
