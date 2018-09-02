@@ -19,42 +19,42 @@ ImageData::ImageData(const std::string &filepath) : filepath(filepath) {
 }
 
 ImageData::~ImageData() {
-    if (imageData != NULL) {
-        delete imageData;
+    if (image_data != NULL) {
+        delete image_data;
     }
 }
 
 void ImageData::Open() {
-    std::ifstream imageFile(filepath.c_str(), std::ios::in | std::ios::binary);
-    if (imageFile.is_open() == false) {
+    std::ifstream image_file(filepath.c_str(), std::ios::in | std::ios::binary);
+    if (image_file.is_open() == false) {
         throw new JpegLoadError("Could not open image.");
     }
 
-    imageFile.seekg(0, imageFile.end);
+    image_file.seekg(0, image_file.end);
 
-    imageLength = imageFile.tellg();
-    if (imageLength == -1) {
+    image_length = image_file.tellg();
+    if (image_length == -1) {
         throw new JpegLoadError("Could not read file size.");
     }
 
-    imageFile.seekg(0, imageFile.beg);
+    image_file.seekg(0, image_file.beg);
 
-    imageData = new unsigned char[10000000];
-    imageFile.read(reinterpret_cast<char *>(imageData), imageLength);
+    image_data = new unsigned char[10000000];
+    image_file.read(reinterpret_cast<char *>(image_data), image_length);
 
-    imageFile.close();
+    image_file.close();
 }
 
 
 //// This is obligatory error-management code that will cause a segfault, even
 //// if not present and even if there's no error.
 
-METHODDEF(void) jpegErrorHandler(j_common_ptr cinfo)
+METHODDEF(void) JpegErrorHandler(j_common_ptr cinfo)
 {
     std::cout << "Error!" << std::endl;
 
-    /* cinfo->err really points to a jpegErrorManager struct, so coerce pointer */
-    jpegErrorPtr jse = (jpegErrorPtr)cinfo->err;
+    /* cinfo->err really points to a JpegErrorManager struct, so coerce pointer */
+    JpegErrorPtr jse = (JpegErrorPtr)cinfo->err;
 
     /* Always display the message. */
     /* We could postpone this until after returning, if we chose. */
@@ -62,7 +62,6 @@ METHODDEF(void) jpegErrorHandler(j_common_ptr cinfo)
 
     // char error_message[JMSG_LENGTH_MAX];
     // cinfo->err->format_message(cinfo, error_message);
-
     // std::cout << "Message: [" << error_message << "]" << std::endl;
 
     /* Return control to the setjmp point */
@@ -75,44 +74,35 @@ METHODDEF(void) jpegErrorHandler(j_common_ptr cinfo)
 bool ImageData::IsMpo(const jpeg_decompress_struct &cinfo) {
     // Print marker list.
 
-    // struct jpeg_marker_struct {
-    //     jpeg_saved_marker_ptr next;   /* next in list, or NULL */
-    //     UINT8 marker;                 /* marker code: JPEG_COM, or JPEG_APP0+n */
-    //     unsigned int original_length;  # bytes of data in the file
-    //     unsigned int data_length;     /* # bytes of data saved at data[] */
-    //     JOCTET * data;                /* the data contained in the marker */
-    //     /* the marker length word is not counted in data_length or original_length */
-    // };
-
-    std::cout << std::endl;
-    std::cout << "Markers:" << std::endl;
-    std::cout << std::endl;
+    // std::cout << std::endl;
+    // std::cout << "Markers:" << std::endl;
+    // std::cout << std::endl;
 
     jpeg_saved_marker_ptr current = cinfo.marker_list;
     while(current != NULL) {
 
-        std::cout
-            << "MARKER=" << std::hex << int(current->marker) << " "
-            << "OLEN=" << current->original_length << " "
-            << "DLEN=" << current->data_length
-            << std::endl;
+        // std::cout
+        //     << "MARKER=" << std::hex << int(current->marker) << " "
+        //     << "OLEN=" << current->original_length << " "
+        //     << "DLEN=" << current->data_length
+        //     << std::endl;
 
         if (current->marker == JPEG_APP0 + 2) {
             // MPO-specific information.
-            std::cout << "> Identified APP2 data." << std::endl;
+            // std::cout << "> Identified APP2 data." << std::endl;
 
-            char formatIdentifier[5];
+            char format_identifier[5];
 
-            void *copyDest = memcpy(formatIdentifier, current->data, 4);
+            void *copyDest = memcpy(format_identifier, current->data, 4);
             if (copyDest == NULL) {
                 throw new JpegLoadError("Could not read format identifier.");
             }
 
-            formatIdentifier[4] = 0;
-            std::cout << "> FORMAT IDENTIFIER: [" << formatIdentifier << "]" << std::endl;
+            format_identifier[4] = 0;
+            // std::cout << "> FORMAT IDENTIFIER: [" << format_identifier << "]" << std::endl;
 
-            if (memcmp(formatIdentifier, mpFormatIdentifier, 4) == 0) {
-                std::cout << "> MPO! MPO!" << std::endl;
+            if (memcmp(format_identifier, kMpFormatIdentifier, 4) == 0) {
+                // std::cout << "> MPO! MPO!" << std::endl;
                 return true;
             }
         }
@@ -120,16 +110,16 @@ bool ImageData::IsMpo(const jpeg_decompress_struct &cinfo) {
         current = current->next;
     }
 
-    std::cout << std::endl;
-    std::cout << "(end of markers)" << std::endl;
+    // std::cout << std::endl;
+    // std::cout << "(end of markers)" << std::endl;
 
     return false;
 }
 
 
 ScanLineCollector::~ScanLineCollector() {
-    if (bitmapData != NULL) {
-        delete bitmapData;
+    if (bitmap_data != NULL) {
+        delete bitmap_data;
     }
 }
 
@@ -140,33 +130,31 @@ void ScanLineCollector::Consume(jpeg_decompress_struct &cinfo) {
     output_components = cinfo.output_components;
     width = cinfo.output_width;
     height = cinfo.output_height;
+    row_bytes = width * output_components;
 
-    rowBytes = width * output_components;
-    //format_ = format;
-
-    bitmapData = new uint8_t[rowBytes * height];
+    bitmap_data = new uint8_t[row_bytes * height];
 
     while (cinfo.output_scanline < cinfo.output_height) {
-        uint8_t *lineBuffer = bitmapData + cinfo.output_scanline * rowBytes;
-        jpeg_read_scanlines(&cinfo, &lineBuffer, 1);
+        uint8_t *line_buffer = bitmap_data + cinfo.output_scanline * row_bytes;
+        jpeg_read_scanlines(&cinfo, &line_buffer, 1);
     }
 
     jpeg_finish_decompress(&cinfo);
 }
 
 
-// Fast-forward past the current image.
+// Fast-forward past the current image's data.
 void ImageData::DrainImage(jpeg_decompress_struct &cinfo) {
     jpeg_start_decompress(&cinfo);
 
-    uint32_t rowBytes = cinfo.output_width * cinfo.output_components;
-    uint8_t *lineBuffer = new uint8_t[rowBytes];
+    uint32_t row_bytes = cinfo.output_width * cinfo.output_components;
+    uint8_t *line_buffer = new uint8_t[row_bytes];
 
     while (cinfo.output_scanline < cinfo.output_height) {
-        jpeg_read_scanlines(&cinfo, &lineBuffer, 1);
+        jpeg_read_scanlines(&cinfo, &line_buffer, 1);
     }
 
-    delete lineBuffer;
+    delete line_buffer;
 
     jpeg_finish_decompress(&cinfo);
 }
@@ -200,17 +188,17 @@ bool ImageData::HasImage(jpeg_decompress_struct &cinfo) {
 // image but not an MPO (should never happen; in this case, consume but ignore
 // the data).
 ScanLineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cinfo) {
-    int headerStatus = jpeg_read_header(&cinfo, TRUE);
-    if (headerStatus != JPEG_HEADER_OK) {
+    int header_status = jpeg_read_header(&cinfo, TRUE);
+    if (header_status != JPEG_HEADER_OK) {
         std::stringstream ss;
-        ss << "Header read failed: (" << headerStatus << ")";
+        ss << "Header read failed: (" << header_status << ")";
 
         throw new JpegLoadError(ss.str());
     }
 
-    bool isMpo = IsMpo(cinfo);
+    bool is_mpo = IsMpo(cinfo);
 
-    if (isMpo == false) {
+    if (is_mpo == false) {
         DrainImage(cinfo);
         return NULL;
     }
@@ -221,6 +209,15 @@ ScanLineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cin
     return slc;
 }
 
+void ImageData::BuildLrImage(std::vector<ScanLineCollector *> &images) {
+    for (std::vector<ScanLineCollector *>::iterator it = images.begin() ; it != images.end(); ++it) {
+        ScanLineCollector *slc = *it;
+        std::cout << " " << slc->Rows() << std::endl;
+
+// TODO(dustin): !! Finish.
+    }
+}
+
 void ImageData::ParseAll() {
     jpeg_decompress_struct cinfo;
 
@@ -229,12 +226,12 @@ void ImageData::ParseAll() {
     // tries to read the header. This has memory-management complexities if we
     // put it somewhere else.
 
-    struct jpegErrorManager jerr;
+    struct JpegErrorManager jerr;
 
     cinfo.err = jpeg_std_error(&jerr.pub);
-    jerr.pub.error_exit = jpegErrorHandler;
+    jerr.pub.error_exit = JpegErrorHandler;
 
-    /* Establish the setjmp return context for jpegErrorHandler to use. */
+    /* Establish the setjmp return context for JpegErrorHandler to use. */
     if (setjmp(jerr.setjmp_buffer)) {
         /* If we get here, the JPEG code has signaled an error.
          * We need to clean up the JPEG object, close the input file, and return.
@@ -246,7 +243,7 @@ void ImageData::ParseAll() {
 
     jpeg_create_decompress(&cinfo);
 
-    jpeg_mem_src(&cinfo, imageData, imageLength);
+    jpeg_mem_src(&cinfo, image_data, image_length);
 
     // JPEG uses APP1. JPEG MPO uses APP2, also.
     jpeg_save_markers(&cinfo, JPEG_APP0 + 1, 0xffff);
@@ -269,8 +266,12 @@ void ImageData::ParseAll() {
         images.push_back(slc);
     }
 
+    if (images.size() == 2) {
+        BuildLrImage(images);
+// TODO(dustin): !! Do something with the result.
+    }
+
     for (std::vector<ScanLineCollector *>::iterator it = images.begin() ; it != images.end(); ++it) {
-        // std::cout << ' ' << (*it)->Rows() << std::endl;
         delete *it;
     }
 
