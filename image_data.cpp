@@ -1,19 +1,4 @@
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <cstdint>
-#include <sstream>
-#include <vector>
-
-#include <stdio.h>
-#include <string.h>
-#include <setjmp.h>
-
-#include <jpeglib.h>
-#include <jerror.h>
-
 #include "image_data.h"
-#include "exceptions.h"
 
 ImageData::ImageData(const std::string &filepath) : filepath(filepath) {
 }
@@ -117,34 +102,8 @@ bool ImageData::IsMpo(const jpeg_decompress_struct &cinfo) {
 }
 
 
-ScanLineCollector::~ScanLineCollector() {
-    if (bitmap_data != NULL) {
-        delete bitmap_data;
-    }
-}
-
-// Store the current image.
-void ScanLineCollector::Consume(jpeg_decompress_struct &cinfo) {
-    jpeg_start_decompress(&cinfo);
-
-    output_components = cinfo.output_components;
-    width = cinfo.output_width;
-    height = cinfo.output_height;
-    row_bytes = width * output_components;
-
-    bitmap_data = new uint8_t[row_bytes * height];
-
-    while (cinfo.output_scanline < cinfo.output_height) {
-        uint8_t *line_buffer = bitmap_data + cinfo.output_scanline * row_bytes;
-        jpeg_read_scanlines(&cinfo, &line_buffer, 1);
-    }
-
-    jpeg_finish_decompress(&cinfo);
-}
-
-
 // Fast-forward past the current image's data.
-void ImageData::DrainImage(jpeg_decompress_struct &cinfo) {
+void ImageData::SkipImageData(jpeg_decompress_struct &cinfo) {
     jpeg_start_decompress(&cinfo);
 
     uint32_t row_bytes = cinfo.output_width * cinfo.output_components;
@@ -199,7 +158,7 @@ ScanLineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cin
     bool is_mpo = IsMpo(cinfo);
 
     if (is_mpo == false) {
-        DrainImage(cinfo);
+        SkipImageData(cinfo);
         return NULL;
     }
 

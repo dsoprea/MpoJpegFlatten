@@ -1,31 +1,23 @@
 #pragma once
 
+#include <iostream>
+#include <fstream>
 #include <string>
+#include <cstdint>
+#include <sstream>
 #include <vector>
 
+#include <stdio.h>
+#include <string.h>
+#include <setjmp.h>
+
 #include <jpeglib.h>
+#include <jerror.h>
+
+#include "exceptions.h"
+#include "scanline_collector.h"
 
 const unsigned char kMpFormatIdentifier[] = { 'M', 'P', 'F', 0 };
-
-
-class ScanLineCollector {
-public:
-    ~ScanLineCollector();
-
-    void Consume(jpeg_decompress_struct &cinfo);
-
-    inline uint8_t *ScanLine(int row) { return &bitmap_data[row * row_bytes]; }
-    inline uint32_t Rows() { return height; }
-    inline uint32_t RowBytes() { return row_bytes; }
-
-private:
-    int output_components;
-    uint32_t width;
-    uint32_t height;
-    uint32_t row_bytes;
-
-    uint8_t *bitmap_data = NULL;
-};
 
 
 //// Error-management code required by libjpeg.
@@ -52,7 +44,7 @@ private:
     ScanLineCollector *ParseNextMpoChildImage(jpeg_decompress_struct &cinfo);
     void BuildLrImage(std::vector<ScanLineCollector *> &images);
     bool IsMpo(const jpeg_decompress_struct &cinfo);
-    void DrainImage(jpeg_decompress_struct &cinfo);
+    void SkipImageData(jpeg_decompress_struct &cinfo);
     bool HasImage(jpeg_decompress_struct &cinfo);
 
     std::string filepath;
