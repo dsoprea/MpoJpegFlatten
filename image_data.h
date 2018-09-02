@@ -32,6 +32,17 @@ typedef struct JpegErrorManager *JpegErrorPtr;
 //// (end of error management code)
 
 
+typedef struct {
+    std::string error_message;
+    uint8_t *data;
+
+    uint32_t width;
+    uint32_t height;
+
+    uint32_t length;
+} LrImage;
+
+
 class ImageData {
 public:
     ImageData(const std::string &filepath);
@@ -39,7 +50,7 @@ public:
 
     void Open();
     std::vector<ScanlineCollector *> *ExtractMpoImages();
-    bool BuildLrImage(const ScanlineCollector *slc_left, const ScanlineCollector *slc_right);
+    LrImage BuildLrImage(const ScanlineCollector *slc_left, const ScanlineCollector *slc_right);
 
 private:
     ScanlineCollector *ParseNextMpoChildImage(jpeg_decompress_struct &cinfo);

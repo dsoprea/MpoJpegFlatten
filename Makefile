@@ -17,4 +17,4 @@ $(BUILD_PATH)/%.o: %.cpp
 .PHONY: test
 
 test: $(BUILD_PATH)/main
-	$(BUILD_PATH)/main
+	$(BUILD_PATH)/main resource/IMAG0185.mpo $(BUILD_PATH)/IMAG0185.mpo.jpg

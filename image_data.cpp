@@ -56,47 +56,34 @@ METHODDEF(void) JpegErrorHandler(j_common_ptr cinfo)
 //// (end of error management)
 
 
+// Determine if the current image looks like an MPO image.
 bool ImageData::IsMpo(const jpeg_decompress_struct &cinfo) {
-    // Print marker list.
 
-    // std::cout << std::endl;
-    // std::cout << "Markers:" << std::endl;
-    // std::cout << std::endl;
+    // Seek through the markers that were discovered for APP2 (not normally
+    // provided by JPEGs).
 
     jpeg_saved_marker_ptr current = cinfo.marker_list;
     while(current != NULL) {
-
-        // std::cout
-        //     << "MARKER=" << std::hex << int(current->marker) << " "
-        //     << "OLEN=" << current->original_length << " "
-        //     << "DLEN=" << current->data_length
-        //     << std::endl;
-
         if (current->marker == JPEG_APP0 + 2) {
-            // MPO-specific information.
-            // std::cout << "> Identified APP2 data." << std::endl;
-
             char format_identifier[5];
 
             void *copyDest = memcpy(format_identifier, current->data, 4);
             if (copyDest == NULL) {
+                // This is an error because it should never happen.
                 throw new JpegLoadError("Could not read format identifier.");
             }
 
             format_identifier[4] = 0;
-            // std::cout << "> FORMAT IDENTIFIER: [" << format_identifier << "]" << std::endl;
 
+            // We had an APP2 block, but it didn't have the expected format
+            // string in the expected place.
             if (memcmp(format_identifier, kMpFormatIdentifier, 4) == 0) {
-                // std::cout << "> MPO! MPO!" << std::endl;
                 return true;
             }
         }
 
         current = current->next;
     }
-
-    // std::cout << std::endl;
-    // std::cout << "(end of markers)" << std::endl;
 
     return false;
 }
@@ -169,26 +156,63 @@ ScanlineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cin
     return slc;
 }
 
-bool ImageData::BuildLrImage(const ScanlineCollector *slc_left, const ScanlineCollector *slc_right) {
+LrImage ImageData::BuildLrImage(const ScanlineCollector *slc_left, const ScanlineCollector *slc_right) {
+    LrImage result;
+
     // Make sure that our two images are exactly the same dimensions.
     if (slc_left->Components() != slc_right->Components()) {
-        return false;
+        result.error_message = "component count mismatch";
+        return result;
     } else if (slc_left->Width() != slc_right->Width()) {
-        return false;
+        result.error_message = "width mismatch";
+        return result;
     } else if (slc_left->Height() != slc_right->Height()) {
-        return false;
+        result.error_message = "height mismatch";
+        return result;
     }
 
 // TODO(dustin): !! Do we want to support any other colorspaces?
     if (slc_left->Colorspace() != JCS_RGB || slc_right->Colorspace() != JCS_RGB) {
-        return false;
+        result.error_message = "colorspace mismatch";
+        return result;
     }
 
-    std::cout << "Ready to build single LR image." << std::endl;
+    // Concatenate each row.
 
-// TODO(dustin): !! Finish. Return actual image data.
+    result.width = slc_left->Width() * 2;
+    result.height = slc_left->Height();
 
-    return true;
+    const uint32_t lrStride = slc_left->Stride() * 2;
+    const uint32_t lrLength = lrStride * slc_left->Height();
+    uint8_t *lrScanlines = new uint8_t[lrLength];
+
+    const uint32_t childStride = slc_left->Stride();
+    for (uint32_t row = 0; row < slc_left->Height(); row++) {
+        uint8_t *lrScanlinesPtr = (uint8_t *)(lrScanlines + row * lrStride);
+
+        uint8_t *lScanlinePtr = slc_left->ScanLine(row);
+        if (memcpy(lrScanlinesPtr, lScanlinePtr, childStride) == NULL) {
+            std::stringstream error_message;
+            error_message << "could not copy LEFT scanline on row (" << row << ")";
+            result.error_message = error_message.str();
+
+            return result;
+        }
+
+        uint8_t *rScanlinePtr = slc_right->ScanLine(row);
+        if (memcpy(lrScanlinesPtr + childStride, rScanlinePtr, childStride) == NULL) {
+            std::stringstream error_message;
+            error_message << "could not copy RIGHT scanline on row (" << row << ")";
+            result.error_message = error_message.str();
+
+            return result;
+        }
+    }
+
+    result.data = lrScanlines;
+    result.length = lrLength;
+
+    return result;
 }
 
 std::vector<ScanlineCollector *> *ImageData::ExtractMpoImages() {

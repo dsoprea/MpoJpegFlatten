@@ -55,6 +55,7 @@ private:
     uint32_t height;
 
     uint32_t stride;
+
     uint8_t *bitmap_data = NULL;
 
     J_COLOR_SPACE colorspace;
