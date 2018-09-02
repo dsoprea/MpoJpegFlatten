@@ -4,6 +4,8 @@ MPO images are JPEG files that have multiple contiguous images, where each of th
 
 This is a tool that validates that a MPO file has exactly two images that each have a APP2 IFD and the MPO format-string inside of it, and then combines those two images into a single normal JPEG. The first image is taken as the left and the second as the right.
 
+This is offered completely without license. No guarantees offered. No attribution required.
+
 
 ## Dependencies
 
