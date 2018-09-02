@@ -6,7 +6,7 @@
 #include "exceptions.h"
 
 // Extracted mostly verbatim from the libjpeg project example.
-void WriteJpegFile(std::string outputFilepath, uint8_t *data, uint32_t width, uint32_t height, int components) {
+void WriteJpegFile(std::string outputFilepath, uint8_t *data, uint32_t width, uint32_t height, J_COLOR_SPACE colorspace, int components) {
     /* This struct contains the JPEG compression parameters and pointers to
      * working space (which is allocated as needed by the JPEG library).
      * It is possible to have several such structures, representing multiple
@@ -61,7 +61,7 @@ void WriteJpegFile(std::string outputFilepath, uint8_t *data, uint32_t width, ui
     cinfo.image_width = width;  /* image width and height, in pixels */
     cinfo.image_height = height;
     cinfo.input_components = components;       /* # of color components per pixel */
-    cinfo.in_color_space = JCS_RGB;   /* colorspace of input image */
+    cinfo.in_color_space = colorspace;   /* colorspace of input image */
     /* Now use the library's routine to set default compression parameters.
      * (You must set at least cinfo.in_color_space before calling this,
      * since the defaults depend on the source color space.)
@@ -150,6 +150,7 @@ int main(int argc, char* argv[]) {
         result.data,
         result.width,
         result.height,
+        slc_left->Colorspace(),
         slc_left->Components());
 
     delete result.data;

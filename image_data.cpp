@@ -169,10 +169,7 @@ LrImage ImageData::BuildLrImage(const ScanlineCollector *slc_left, const Scanlin
     } else if (slc_left->Height() != slc_right->Height()) {
         result.error_message = "height mismatch";
         return result;
-    }
-
-// TODO(dustin): !! Do we want to support any other colorspaces?
-    if (slc_left->Colorspace() != JCS_RGB || slc_right->Colorspace() != JCS_RGB) {
+    } else if (slc_left->Colorspace() != slc_right->Colorspace()) {
         result.error_message = "colorspace mismatch";
         return result;
     }

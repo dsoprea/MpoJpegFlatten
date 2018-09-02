@@ -14,7 +14,10 @@ $(BUILD_PATH)/%.o: %.cpp
 	mkdir -p $(BUILD_PATH)
 	$(CC) $(CXXFLAGS) -c $< -o $@
 
-.PHONY: test
+.PHONY: test clean
 
 test: $(BUILD_PATH)/main
 	$(BUILD_PATH)/main resource/IMAG0185.mpo $(BUILD_PATH)/IMAG0185.mpo.jpg
+
+clean:
+	rm -fr build
