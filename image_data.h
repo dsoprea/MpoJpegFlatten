@@ -38,11 +38,11 @@ public:
     ~ImageData();
 
     void Open();
-    void ParseAll();
+    std::vector<ScanlineCollector *> *ExtractMpoImages();
+    bool BuildLrImage(const ScanlineCollector *slc_left, const ScanlineCollector *slc_right);
 
 private:
-    ScanLineCollector *ParseNextMpoChildImage(jpeg_decompress_struct &cinfo);
-    void BuildLrImage(std::vector<ScanLineCollector *> &images);
+    ScanlineCollector *ParseNextMpoChildImage(jpeg_decompress_struct &cinfo);
     bool IsMpo(const jpeg_decompress_struct &cinfo);
     void SkipImageData(jpeg_decompress_struct &cinfo);
     bool HasImage(jpeg_decompress_struct &cinfo);

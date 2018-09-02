@@ -7,21 +7,25 @@
 
 #include <jpeglib.h>
 
-class ScanLineCollector {
+class ScanlineCollector {
 public:
-    ~ScanLineCollector();
+    ~ScanlineCollector();
 
     void Consume(jpeg_decompress_struct &cinfo);
 
-    inline uint8_t *ScanLine(int row) { return &bitmap_data[row * row_bytes]; }
-    inline uint32_t Rows() { return height; }
-    inline uint32_t RowBytes() { return row_bytes; }
+    inline uint8_t *ScanLine(int row) const { return &bitmap_data[row * row_bytes]; }
+
+    inline int Components() const { return components; }
+    inline uint32_t Width() const { return width; }
+    inline uint32_t Height() const { return height; }
+
+    inline uint32_t RowBytes() const { return row_bytes; }
 
 private:
-    int output_components;
+    int components;
     uint32_t width;
     uint32_t height;
-    uint32_t row_bytes;
 
+    uint32_t row_bytes;
     uint8_t *bitmap_data = NULL;
 };

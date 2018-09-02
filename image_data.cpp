@@ -146,7 +146,7 @@ bool ImageData::HasImage(jpeg_decompress_struct &cinfo) {
 // Parse the next JPEG image in the current stream. Return NULL if there's an
 // image but not an MPO (should never happen; in this case, consume but ignore
 // the data).
-ScanLineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cinfo) {
+ScanlineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cinfo) {
     int header_status = jpeg_read_header(&cinfo, TRUE);
     if (header_status != JPEG_HEADER_OK) {
         std::stringstream ss;
@@ -162,22 +162,30 @@ ScanLineCollector *ImageData::ParseNextMpoChildImage(jpeg_decompress_struct &cin
         return NULL;
     }
 
-    ScanLineCollector *slc = new ScanLineCollector();
+    ScanlineCollector *slc = new ScanlineCollector();
     slc->Consume(cinfo);
 
     return slc;
 }
 
-void ImageData::BuildLrImage(std::vector<ScanLineCollector *> &images) {
-    for (std::vector<ScanLineCollector *>::iterator it = images.begin() ; it != images.end(); ++it) {
-        ScanLineCollector *slc = *it;
-        std::cout << " " << slc->Rows() << std::endl;
-
-// TODO(dustin): !! Finish.
+bool ImageData::BuildLrImage(const ScanlineCollector *slc_left, const ScanlineCollector *slc_right) {
+    // Make sure that our two images are exactly the same dimensions.
+    if (slc_left->Components() != slc_right->Components()) {
+        return false;
+    } else if (slc_left->Width() != slc_right->Width()) {
+        return false;
+    } else if (slc_left->Height() != slc_right->Height()) {
+        return false;
     }
+
+    std::cout << "Ready to build single LR image." << std::endl;
+
+// TODO(dustin): !! Finish. Return actual image data.
+
+    return true;
 }
 
-void ImageData::ParseAll() {
+std::vector<ScanlineCollector *> *ImageData::ExtractMpoImages() {
     jpeg_decompress_struct cinfo;
 
 
@@ -211,28 +219,21 @@ void ImageData::ParseAll() {
 
     // Read all images from a single stream. Normal JPEGs will have one. The
     // MPOs we're interested in will have more than one.
-    std::vector<ScanLineCollector *> images;
+    std::vector<ScanlineCollector *> *images = new std::vector<ScanlineCollector *>();
     while(true) {
         if (HasImage(cinfo) == false) {
             break;
         }
 
-        ScanLineCollector *slc = ParseNextMpoChildImage(cinfo);
+        ScanlineCollector *slc = ParseNextMpoChildImage(cinfo);
         if (slc == NULL) {
             break;
         }
 
-        images.push_back(slc);
-    }
-
-    if (images.size() == 2) {
-        BuildLrImage(images);
-// TODO(dustin): !! Do something with the result.
-    }
-
-    for (std::vector<ScanLineCollector *>::iterator it = images.begin() ; it != images.end(); ++it) {
-        delete *it;
+        images->push_back(slc);
     }
 
     jpeg_destroy_decompress(&cinfo);
+
+    return images;
 }

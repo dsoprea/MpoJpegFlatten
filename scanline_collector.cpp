@@ -1,19 +1,19 @@
 #include "scanline_collector.h"
 
-ScanLineCollector::~ScanLineCollector() {
+ScanlineCollector::~ScanlineCollector() {
     if (bitmap_data != NULL) {
         delete bitmap_data;
     }
 }
 
 // Store the current image.
-void ScanLineCollector::Consume(jpeg_decompress_struct &cinfo) {
+void ScanlineCollector::Consume(jpeg_decompress_struct &cinfo) {
     jpeg_start_decompress(&cinfo);
 
-    output_components = cinfo.output_components;
+    components = cinfo.output_components;
     width = cinfo.output_width;
     height = cinfo.output_height;
-    row_bytes = width * output_components;
+    row_bytes = width * components;
 
     bitmap_data = new uint8_t[row_bytes * height];
 
